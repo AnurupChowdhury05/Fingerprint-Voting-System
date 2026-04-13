@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Results — SecureVote</title>
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <style>
+    .res-wrap { max-width:1100px; margin:0 auto; padding:2rem 1.5rem 4rem; }
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:1.25rem; margin-bottom:2.5rem; }
+    @media(max-width:768px){ .charts-row{flex-direction:column;} }
+
+    /* Live ticker */
+    .live-ticker { overflow:hidden; background:rgba(0,212,255,.06); border:1px solid rgba(0,212,255,.2); border-radius:var(--radius-full); padding:.5rem 1rem; font-family:var(--font-mono); font-size:.75rem; color:var(--text-secondary); white-space:nowrap; margin-bottom:2rem; }
+    .live-ticker-label { color:var(--primary); font-weight:700; margin-right:1.5rem; flex-shrink:0; }
+    .ticker-track { display:flex; animation:tickerScroll 30s linear infinite; }
+    .ticker-track:hover { animation-play-state:paused; }
+    @keyframes tickerScroll { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+
+    /* Chart tabs */
+    .chart-tabs { display:flex; gap:4px; margin-bottom:1rem; }
+    .chart-tab-btn { padding:.4rem .9rem; border:1px solid var(--border-subtle); background:transparent; color:var(--text-muted); border-radius:var(--radius-sm); cursor:pointer; font-size:.78rem; font-weight:600; transition:all .2s; }
+    .chart-tab-btn:hover { color:var(--text-primary); border-color:var(--border); }
+    .chart-tab-btn.active { background:var(--primary-dim); color:var(--primary); border-color:rgba(0,212,255,.3); }
+
+    /* Pipeline */
+    .pipeline { display:flex; align-items:center; gap:0; background:var(--bg-tertiary); border:1px solid var(--border-subtle); border-radius:var(--radius-full); padding:.5rem 1.25rem; overflow-x:auto; margin-bottom:2rem; }
+    .pipeline-step { display:flex; align-items:center; gap:.4rem; font-family:var(--font-mono); font-size:.68rem; color:var(--text-muted); letter-spacing:.04em; white-space:nowrap; padding:.25rem .5rem; border-radius:var(--radius-sm); transition:all .3s; }
+    .pipeline-step::before { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.4; }
+    .pipeline-step.pipeline-active { color:var(--primary); background:var(--primary-dim); }
+    .pipeline-step.pipeline-active::before { opacity:1; animation:pulse-dot .8s infinite; }
+    .pipeline-step.pipeline-done { color:var(--success); }
+    .pipeline-step.pipeline-done::before { opacity:1; background:var(--success); }
+    .pipeline-arrow { color:var(--border); font-size:.7rem; flex-shrink:0; padding:0 .25rem; }
+    #winner-banner { display:none; margin-bottom:2rem; }
+  </style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+  <div class="scanline-overlay"></div>
+
+  <nav class="nav" style="position:fixed;top:0;width:100%;z-index:100">
+    <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit"><div class="brand-icon">🖐️</div><span>SECURE<span class="text-gradient">VOTE</span></span></a>
+    <div class="nav-links">
+      <a href="vote.html"    class="nav-link">🗳️ Vote</a>
+      <a href="register.html"class="nav-link">📋 Register</a>
+      <a href="admin.html"   class="nav-link">⚙️ Admin</a>
+    </div>
+  </nav>
+
+  <div class="page-content" style="padding-top:70px">
+    <div class="res-wrap">
+
+      <!-- Header -->
+      <div class="flex justify-between items-center flex-wrap gap-md" style="padding:2rem 0 1.5rem">
+        <div>
+          <div class="eyebrow mb-xs">📊 Live Election Results</div>
+          <h1 id="election-title">General Election 2026</h1>
+          <div class="flex items-center gap-md mt-xs flex-wrap">
+            <span class="badge" id="election-state-badge">Loading…</span>
+            <span class="text-xs text-muted">Auto-refreshes in <span id="refresh-countdown" class="font-mono text-accent fw-700">10</span>s</span>
+            <span class="text-xs text-muted">Last updated: <span id="last-updated"></span></span>
+          </div>
+        </div>
+        <div class="flex gap-sm flex-wrap">
+          <button class="btn btn-outline btn-sm" id="btn-refresh">↻ Refresh Now</button>
+          <button class="btn btn-ghost btn-sm"   id="btn-export">⬇ Export JSON</button>
+        </div>
+      </div>
+
+      <!-- Winner Banner -->
+      <div id="winner-banner"></div>
+
+      <!-- Live Ticker -->
+      <div class="live-ticker flex items-center">
+        <span class="live-ticker-label">⚡ LIVE</span>
+        <div class="ticker-track" id="live-ticker-track">
+          <span class="text-muted" style="font-size:.8rem">Waiting for votes…</span>
+        </div>
+      </div>
+
+      <!-- Data Pipeline -->
+      <div class="pipeline">
+        <div class="pipeline-step">Votes Cast (<span id="pipeline-votes-count">0</span>)</div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">Stored in DB</div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">Backend Aggregates</div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">API Sends Data</div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">Dashboard Updates ✓</div>
+      </div>
+
+      <!-- Stat Cards -->
+      <div class="stats-grid">
+        <div class="card stat-card card-glow-primary"><div class="stat-icon" style="background:var(--primary-dim)">🗳️</div><div class="stat-value text-gradient" id="stat-votes">0</div><div class="stat-label">Votes Cast</div></div>
+        <div class="card stat-card card-glow-secondary"><div class="stat-icon" style="background:var(--secondary-dim)">✅</div><div class="stat-value" style="background:linear-gradient(135deg,var(--secondary),#9b59fe);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text" id="stat-voters">0</div><div class="stat-label">Approved Voters</div></div>
+        <div class="card stat-card card-glow-accent"><div class="stat-icon" style="background:var(--accent-dim)">📈</div><div class="stat-value text-gold" id="stat-turnout">0</div><div class="stat-label">Turnout %</div></div>
+        <div class="card stat-card"><div class="stat-icon" style="background:var(--warning-dim)">⏳</div><div class="stat-value" style="color:var(--warning)" id="stat-pending">0</div><div class="stat-label">Pending Approval</div></div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="flex gap-xl flex-wrap charts-row" style="margin-bottom:2.5rem">
+        <!-- Main switchable chart -->
+        <div class="card" style="flex:2;min-width:280px">
+          <div class="flex justify-between items-center flex-wrap gap-md mb-md">
+            <h4 class="card-title">Vote Analytics</h4>
+            <div class="chart-tabs">
+              <button class="chart-tab-btn active" data-chart="bar">Bar</button>
+              <button class="chart-tab-btn" data-chart="area">Area</button>
+              <button class="chart-tab-btn" data-chart="radar">Radar</button>
+            </div>
+          </div>
+          <div style="height:300px;position:relative"><canvas id="main-chart"></canvas></div>
+        </div>
+        <!-- Donut -->
+        <div class="card" style="flex:1;min-width:220px">
+          <div class="flex justify-between items-center mb-md">
+            <h4 class="card-title">Vote Share</h4>
+            <span class="badge badge-secondary">Donut</span>
+          </div>
+          <div style="height:300px;position:relative"><canvas id="donut-chart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Race Bars -->
+      <div class="flex justify-between items-center mb-lg">
+        <h2>Candidate <span class="text-gradient">Race</span></h2>
+        <span class="badge badge-primary badge-pulse">Live</span>
+      </div>
+      <div id="race-bars" style="display:flex;flex-direction:column;gap:1.25rem"></div>
+
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script src="js/results.js"></script>
+</body>
+</html>
