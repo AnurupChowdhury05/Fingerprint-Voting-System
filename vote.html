@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voting Booth — SecureVote</title>
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/scanner.css">
+  <link rel="stylesheet" href="css/components.css">
+  <!-- FAANG-level CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+  <style>
+    .vote-wrap { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+    .state-banner { display:none; background:var(--danger-dim); border:1px solid var(--danger); border-radius:var(--radius-md); padding:1rem 1.5rem; margin-bottom:1.5rem; color:var(--danger); font-weight:600; text-align:center; }
+    .voter-bar { display:none; align-items:center; gap:1rem; flex-wrap:wrap; background:var(--bg-card); border:1px solid rgba(0,255,136,.25); border-radius:var(--radius-lg); padding:1rem 1.5rem; margin-bottom:2rem; backdrop-filter:blur(12px); }
+    .voter-av { width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,var(--success),#00aa55);display:flex;align-items:center;justify-content:center;font-family:var(--font-heading);font-weight:700;font-size:1.2rem;color:#000;flex-shrink:0; }
+    .stages-flow { display:flex;align-items:center;gap:8px;margin-bottom:2rem;overflow-x:auto;padding-bottom:4px; }
+    .flow-step { display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:.72rem;font-family:var(--font-mono);color:var(--text-muted);letter-spacing:.04em;padding:.25rem .5rem;border-radius:var(--radius-sm);transition:all .3s; }
+    .flow-step.active { color:var(--primary); background:var(--primary-dim); }
+    .flow-step.done   { color:var(--success); }
+    .flow-arrow { color:var(--border);font-size:.7rem; }
+    .receipt-row { display:flex;justify-content:space-between;padding:.65rem 0;border-bottom:1px solid var(--border-subtle);font-size:.875rem; }
+    .receipt-row:last-child { border:none; }
+    #identity-error { display:none; color:var(--danger); font-size:.875rem; margin-top:.5rem; font-weight:600; }
+    .scan-info-card { max-width:420px; margin:0 auto 1.5rem; }
+    /* Confidence bar */
+    #confidence-wrap { display:none; max-width:420px; margin:1.5rem auto 0; }
+    .confidence-bar { background:rgba(255,255,255,.05); border-radius:var(--radius-full); height:10px; overflow:hidden; }
+    #confidence-fill { height:100%; width:0%; border-radius:var(--radius-full); transition:width .08s ease; }
+    /* Print styles */
+    @media print {
+      #stage-identity,#stage-scan,#stage-vote,.nav,.flow,.state-banner,.print-hide { display:none!important; }
+      #stage-success { display:block!important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+  <div class="scanline-overlay"></div>
+
+  <nav class="nav" style="position:fixed;top:0;width:100%;z-index:100">
+    <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit"><div class="brand-icon">🖐️</div><span>SECURE<span class="text-gradient">VOTE</span></span></a>
+    <div class="nav-links">
+      <div class="countdown">⏱ <span id="session-timer">20:00</span></div>
+      <a href="results.html" class="nav-link">📊 Results</a>
+      <a href="index.html"   class="nav-link">← Home</a>
+    </div>
+  </nav>
+
+  <div class="page-content" style="padding-top:70px">
+    <div class="vote-wrap">
+      <div class="state-banner" id="state-banner"></div>
+
+      <!-- Flow indicator -->
+      <div class="stages-flow">
+        <div class="flow-step active" id="flow-identity">① Country + Voter ID</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" id="flow-scan">② Fingerprint</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" id="flow-vote">③ Select Candidate</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" id="flow-success">④ Confirmed</div>
+      </div>
+
+      <!-- ── STAGE 1: IDENTITY ── -->
+      <div id="stage-identity">
+        <div style="text-align:center;margin-bottom:2.5rem">
+          <div class="eyebrow mb-sm">🗳️ Secure Voting Booth</div>
+          <h1>Verify Your <span class="text-gradient">Identity</span></h1>
+          <p class="text-secondary mt-sm">Enter your country and Voter ID to begin the secure authentication process.</p>
+        </div>
+        <div style="max-width:500px;margin:0 auto">
+          <div class="card card-lg">
+            <h3 class="card-title mb-lg">Identity Entry</h3>
+            <div class="form-group mb-md">
+              <label class="form-label" for="v-country">Country of Registration *</label>
+              <select class="form-select" id="v-country" required><option value="">Select Country</option></select>
+            </div>
+            <div class="form-group mb-xl">
+              <label class="form-label" for="v-voter-id">Voter ID *</label>
+              <input class="form-input" id="v-voter-id" type="text" placeholder="e.g. IND-2026-A3F9B1" style="text-transform:uppercase;font-family:var(--font-mono);letter-spacing:.1em;font-size:1rem" required>
+              <span class="form-hint">Format: COUNTRY-YEAR-XXXXXX (from your approval notice)</span>
+              <div id="identity-error"></div>
+            </div>
+            <button class="btn btn-primary btn-block btn-xl" id="btn-verify-identity">
+              <span class="btn-text">🔍 Verify &amp; Proceed to Biometric Scan</span>
+            </button>
+            <div class="alert alert-info mt-lg">
+              <span class="alert-icon">ℹ️</span>
+              <span>Only admin-approved voters can enter. Every access attempt is logged.</span>
+            </div>
+          </div>
+          <div style="text-align:center;margin-top:1.5rem">
+            <a href="register.html" class="btn btn-ghost">+ Not registered? Register here</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── STAGE 2: SCAN ── -->
+      <div id="stage-scan" style="display:none">
+        <div style="text-align:center;margin-bottom:2rem">
+          <div class="eyebrow mb-sm">🔐 Biometric Authentication</div>
+          <h2>Fingerprint <span class="text-gradient">Scan</span></h2>
+        </div>
+        <!-- Identity lookup card -->
+        <div class="card scan-info-card" style="border-color:rgba(0,255,136,.3)">
+          <div class="flex items-center gap-md">
+            <div style="width:44px;height:44px;border-radius:50%;background:var(--success-dim);border:1px solid var(--success);display:flex;align-items:center;justify-content:center;font-size:1.3rem">👤</div>
+            <div style="flex:1">
+              <div class="fw-600" id="scan-voter-name">—</div>
+              <div class="font-mono text-xs text-muted" id="scan-voter-id">—</div>
+            </div>
+            <span class="badge badge-success" id="scan-voter-country">—</span>
+            <span class="badge badge-success badge-pulse">Identity Located</span>
+          </div>
+        </div>
+        <div style="max-width:600px;margin:0 auto">
+          <div class="card card-lg" style="text-align:center;margin-top:1.5rem">
+            <div class="scanner-wrap" data-scanner-id="vote-scan-canvas">
+              <div class="scanner-frame" data-state="idle">
+                <canvas id="vote-scan-canvas"></canvas>
+                <div class="scan-beam"></div>
+                <div class="scanner-overlay"></div>
+                <div class="scanner-frame-tl"></div>
+                <div class="scanner-frame-br"></div>
+              </div>
+              <div class="data-stream" id="data-stream"></div>
+              <div class="scanner-status">
+                <div class="scanner-status-text">PLACE FINGER ON SENSOR</div>
+                <div class="scanner-hint">Click the sensor to begin scan</div>
+              </div>
+            </div>
+
+            <!-- Biometric confidence score -->
+            <div id="confidence-wrap" style="display:none">
+              <div class="flex justify-between mb-xs mt-md">
+                <span class="text-xs text-muted font-mono text-uppercase" style="letter-spacing:.08em">Biometric Confidence</span>
+                <span class="text-xs font-mono fw-700" id="confidence-label" style="color:var(--warning)">SCANNING…</span>
+              </div>
+              <div class="confidence-bar">
+                <div id="confidence-fill" style="height:100%;width:0%;border-radius:9999px"></div>
+              </div>
+              <div style="text-align:right;margin-top:.25rem">
+                <span class="font-mono text-xs text-primary fw-700" id="confidence-value">0%</span>
+              </div>
+            </div>
+
+            <div class="alert alert-warning mt-lg" style="text-align:left">
+              <span class="alert-icon">⚠️</span>
+              <span>3 failed scans will lock this session and trigger a security alert.</span>
+            </div>
+          </div>
+          <div style="text-align:center;margin-top:1rem">
+            <button class="btn btn-ghost btn-sm" onclick="showStage('identity');scanner.reset()">← Back to Identity Entry</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── STAGE 3: VOTE ── -->
+      <div id="stage-vote" style="display:none">
+        <div class="voter-bar" id="vote-voter-bar">
+          <div class="voter-av" id="voter-av-initial">V</div>
+          <div style="flex:1"><div class="fw-600" id="vbar-name">—</div><div class="font-mono text-xs text-muted" id="vbar-id">—</div></div>
+          <span class="badge badge-success" id="vbar-country">—</span>
+          <span class="badge badge-success badge-pulse">Authenticated ✓</span>
+        </div>
+        <div style="text-align:center;margin-bottom:2rem">
+          <h2>Select Your <span class="text-gradient">Candidate</span></h2>
+          <p class="text-secondary mt-xs text-sm">Choose carefully — your vote is <strong>final</strong> and cannot be changed.</p>
+        </div>
+        <div class="candidates-grid" id="candidates-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.25rem"></div>
+        <div style="text-align:center;margin-top:2.5rem">
+          <button class="btn btn-primary btn-xl" id="btn-cast-vote" disabled><span class="btn-text">🗳️ Cast My Vote</span></button>
+          <div class="text-xs text-muted mt-sm">Select a candidate above to enable voting</div>
+        </div>
+      </div>
+
+      <!-- ── STAGE 4: SUCCESS ── -->
+      <div id="stage-success" style="display:none;text-align:center;padding:3rem 0">
+        <div style="width:110px;height:110px;border-radius:50%;background:var(--success-dim);border:3px solid var(--success);display:flex;align-items:center;justify-content:center;font-size:3.5rem;box-shadow:0 0 60px rgba(0,255,136,.4);animation:float 3s ease-in-out infinite;margin:0 auto 2rem">✓</div>
+        <div class="eyebrow mb-md">Vote Successfully Recorded</div>
+        <h2>Thank You, <span class="text-gradient" id="suc-voter-name">Voter</span>!</h2>
+        <p class="text-secondary mt-md" style="max-width:460px;margin-left:auto;margin-right:auto;line-height:1.8">Your ballot has been cryptographically secured and recorded in the election ledger.</p>
+
+        <div class="card" style="max-width:440px;margin:2rem auto;text-align:left" id="print-receipt">
+          <div class="card-header mb-md"><h4 class="card-title">🧾 Official Voting Receipt</h4><span class="badge badge-success">Confirmed</span></div>
+          <div class="receipt-row"><span class="text-muted">Voter Name</span><span class="fw-600" id="suc-voter-name-r"></span></div>
+          <div class="receipt-row"><span class="text-muted">Voter ID</span><span class="font-mono text-sm" id="suc-voter-id"></span></div>
+          <div class="receipt-row"><span class="text-muted">Candidate</span><span class="fw-600"><span id="suc-cand-sym"></span> <span id="suc-cand-name"></span></span></div>
+          <div class="receipt-row"><span class="text-muted">Party</span><span id="suc-cand-party"></span></div>
+          <div class="receipt-row"><span class="text-muted">Timestamp</span><span class="font-mono text-xs" id="suc-timestamp"></span></div>
+          <div class="receipt-row"><span class="text-muted">Receipt ID</span><span class="font-mono text-sm text-primary" id="suc-receipt"></span></div>
+        </div>
+
+        <div class="flex gap-md justify-center flex-wrap print-hide">
+          <button class="btn btn-outline btn-lg" onclick="printReceipt()">🖨️ Print Receipt</button>
+          <a href="results.html" class="btn btn-primary btn-lg">📊 View Live Results</a>
+          <a href="index.html"   class="btn btn-ghost">← Home</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div class="modal-backdrop" id="confirm-modal">
+    <div class="modal">
+      <button class="modal-close" onclick="document.getElementById('confirm-modal').classList.remove('open')">×</button>
+      <div class="modal-icon" style="background:var(--primary-dim);font-size:2.5rem" id="cfm-sym">⚡</div>
+      <h3 class="modal-title">Confirm Your Vote</h3>
+      <div class="modal-body">
+        <p class="text-secondary">You are about to cast your vote for:</p>
+        <p class="fw-700 text-xl mt-sm" id="cfm-name"></p>
+        <p class="text-muted text-sm" id="cfm-party"></p>
+        <div class="divider"></div>
+        <p class="text-sm">Voter: <strong id="cfm-voter"></strong></p>
+        <div class="alert alert-warning mt-md" style="text-align:left">
+          <span class="alert-icon">⚠️</span>
+          <span>This action is <strong>irreversible</strong>. You cannot change your vote after confirming.</span>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="btn-cancel-vote">Cancel</button>
+        <button class="btn btn-primary btn-lg" id="btn-confirm-vote"><span class="btn-text">✓ Confirm &amp; Cast Vote</span></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script src="js/scanner.js"></script>
+  <script src="js/vote.js"></script>
+  <script>
+    // ── Accessibility: keyboard trigger for scanner canvas ──
+    document.addEventListener('DOMContentLoaded', () => {
+      const canvas = document.getElementById('vote-scan-canvas');
+      if (canvas) {
+        canvas.setAttribute('tabindex', '0');
+        canvas.setAttribute('role', 'button');
+        canvas.setAttribute('aria-label', 'Fingerprint scanner — press Space or Enter to scan');
+        canvas.addEventListener('keydown', e => {
+          if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); canvas.click(); }
+        });
+      }
+      // Focus trap for confirm modal
+      const modal = document.getElementById('confirm-modal');
+      if (modal) {
+        modal.addEventListener('keydown', e => {
+          if (e.key === 'Escape') modal.classList.remove('open');
+        });
+      }
+    });
+  </script>
+</body>
+</html>
