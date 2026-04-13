@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel — SecureVote</title>
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components.css">
+  <style>
+    .admin-wrap { max-width:1200px; margin:0 auto; padding:2rem 1.5rem 4rem; }
+    #admin-login-screen { min-height:100vh; align-items:center; justify-content:center; padding:2rem; display:none; }
+    #admin-panel        { display:none; }
+    .login-card         { max-width:420px; width:100%; text-align:center; }
+    .admin-lock         { width:90px;height:90px;border-radius:50%;background:var(--secondary-dim);border:2px solid var(--secondary);display:flex;align-items:center;justify-content:center;font-size:2.5rem;margin:0 auto 2rem;box-shadow:0 0 40px var(--secondary-glow);animation:float 4s ease-in-out infinite; }
+    .shake              { animation:scanFailShake .4s ease; }
+    @keyframes scanFailShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(7px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+
+    /* Election lifecycle */
+    .elc-timeline { display:flex; align-items:center; gap:0; margin-bottom:2rem; overflow-x:auto; }
+    .elc-state-node { display:flex; flex-direction:column; align-items:center; gap:.4rem; padding:.75rem 1.25rem; border-radius:var(--radius-md); border:1px solid var(--border-subtle); background:var(--bg-tertiary); flex-shrink:0; transition:all .3s ease; }
+    .elc-state-node .node-icon   { font-size:1.4rem; }
+    .elc-state-node .node-label  { font-size:.7rem; font-family:var(--font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--text-muted); }
+    .elc-state-node.current      { border-color:var(--primary); background:var(--primary-dim); box-shadow:0 0 16px var(--primary-glow); }
+    .elc-state-node.current .node-label { color:var(--primary); }
+    .elc-state-node.done         { border-color:var(--success); background:var(--success-dim); }
+    .elc-state-node.done .node-label { color:var(--success); }
+    .elc-connector { flex:1; height:2px; background:var(--border-subtle); min-width:30px; margin:0 4px; margin-bottom:24px; }
+    .elc-connector.done { background:linear-gradient(90deg,var(--success),var(--primary)); }
+
+    /* Candidate modal */
+    #cand-modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);z-index:1000;display:none;align-items:center;justify-content:center;padding:1rem; }
+    #cand-modal-backdrop.open { display:flex;animation:fadeIn .25s ease; }
+    #cand-modal { background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-xl);padding:2.5rem;max-width:520px;width:100%;animation:modalSlideUp .35s cubic-bezier(.34,1.56,.64,1);backdrop-filter:blur(24px); }
+    @keyframes modalSlideUp{from{opacity:0;transform:translateY(30px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+    /* Monitor tab */
+    #mon-vote-feed { max-height:320px; overflow-y:auto; }
+    .fraud-sev-critical { color:var(--danger); }
+    .fraud-sev-high     { color:#ff6633; }
+  </style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+  <div class="scanline-overlay"></div>
+
+  <nav class="nav">
+    <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit"><div class="brand-icon">🖐️</div><span>SECURE<span class="text-gradient">VOTE</span></span></a>
+    <div class="nav-links">
+      <a href="results.html" class="nav-link">📊 Results</a>
+      <button class="btn btn-danger btn-sm" id="btn-logout" style="display:none">Logout</button>
+    </div>
+  </nav>
+
+  <div class="page-content">
+
+    <!-- ══ LOGIN ══ -->
+    <div id="admin-login-screen">
+      <div class="card card-lg login-card">
+        <div class="admin-lock">🔐</div>
+        <div class="eyebrow mb-md">Administrator Access</div>
+        <h2 class="mb-xs">Admin <span class="text-gradient">Login</span></h2>
+        <p class="text-secondary text-sm mb-xl">Enter the administrator password to access election controls.</p>
+        <form id="login-form" style="text-align:left">
+          <div class="form-group mb-lg">
+            <label class="form-label" for="admin-pass">Password</label>
+            <input class="form-input" id="admin-pass" type="password" placeholder="Enter password" required>
+            <span class="form-hint">Demo password: <code style="color:var(--accent)">admin123</code></span>
+          </div>
+          <button class="btn btn-secondary btn-block btn-lg" id="login-btn" type="submit"><span class="btn-text">🔓 Enter Admin Panel</span></button>
+        </form>
+        <div class="divider mt-xl"></div>
+        <a href="index.html" class="btn btn-ghost btn-block mt-md">← Back to Home</a>
+      </div>
+    </div>
+
+    <!-- ══ ADMIN PANEL ══ -->
+    <div id="admin-panel">
+      <div class="admin-wrap">
+
+        <!-- Header -->
+        <div class="flex justify-between items-center flex-wrap gap-md" style="padding:2rem 0 1.5rem">
+          <div>
+            <div class="eyebrow mb-xs">⚙️ Control Panel</div>
+            <h1>Election <span class="text-gradient">Administrator</span></h1>
+          </div>
+          <div id="d-election-state" class="badge badge-warning" style="font-size:.8rem">Loading…</div>
+        </div>
+
+        <!-- Tabs (mobile scrollable) -->
+        <div class="tabs mb-xl" style="overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none" role="tablist" aria-label="Admin sections">
+          <button class="tab-btn active" data-tab="dashboard" role="tab" aria-selected="true">&#128202; Dashboard</button>
+          <button class="tab-btn" data-tab="voters" role="tab" aria-selected="false">&#128101; Voters <span id="pending-badge" class="badge badge-warning" style="font-size:.6rem;margin-left:4px"></span></button>
+          <button class="tab-btn" data-tab="candidates" role="tab" aria-selected="false">&#127885; Candidates</button>
+          <button class="tab-btn" data-tab="election" role="tab" aria-selected="false">&#128379; Election Control</button>
+          <button class="tab-btn" data-tab="monitor" role="tab" aria-selected="false">&#128225; Live Monitor</button>
+          <button class="tab-btn" data-tab="fraud" role="tab" aria-selected="false">&#128680; Fraud &amp; Alerts</button>
+          <button class="tab-btn" data-tab="results" role="tab" aria-selected="false">&#127942; Results &amp; Export</button>
+        </div>
+
+        <!-- ── DASHBOARD ── -->
+        <div class="tab-panel active" id="tab-dashboard">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1.25rem;margin-bottom:2rem">
+            <div class="card stat-card card-glow-primary"><div class="stat-icon" style="background:var(--primary-dim)">&#128101;</div><div class="flex items-center gap-xs"><div class="stat-value text-gradient" id="d-registered">0</div><span class="kpi-trend"></span></div><div class="stat-label">Registered</div></div>
+            <div class="card stat-card"><div class="stat-icon" style="background:var(--warning-dim)">&#9203;</div><div class="flex items-center gap-xs"><div class="stat-value" style="color:var(--warning)" id="d-pending">0</div><span class="kpi-trend"></span></div><div class="stat-label">Pending</div></div>
+            <div class="card stat-card card-glow-success"><div class="stat-icon" style="background:var(--success-dim)">&#9989;</div><div class="flex items-center gap-xs"><div class="stat-value text-success" id="d-approved">0</div><span class="kpi-trend"></span></div><div class="stat-label">Approved</div></div>
+            <div class="card stat-card card-glow-accent"><div class="stat-icon" style="background:var(--accent-dim)">&#128379;</div><div class="flex items-center gap-xs"><div class="stat-value text-gold" id="d-voted">0</div><span class="kpi-trend"></span></div><div class="stat-label">Voted</div></div>
+            <div class="card stat-card"><div class="stat-icon" style="background:var(--secondary-dim)">&#128200;</div><div class="flex items-center gap-xs"><div class="stat-value" style="color:var(--secondary)" id="d-turnout">0</div><span class="kpi-trend"></span></div><div class="stat-label">Turnout %</div></div>
+            <div class="card stat-card card-glow-danger"><div class="stat-icon" style="background:var(--danger-dim)">&#128680;</div><div class="flex items-center gap-xs"><div class="stat-value text-danger" id="d-fraud">0</div><span class="kpi-trend"></span></div><div class="stat-label">Fraud Alerts</div></div>
+          </div>
+          <div class="grid grid-2 gap-xl">
+            <div class="card">
+              <div class="card-header mb-lg"><h4 class="card-title">Vote Tally</h4><a href="results.html" class="btn btn-ghost btn-sm">Full Results →</a></div>
+              <div id="d-tally"></div>
+            </div>
+            <div class="card">
+              <div class="card-header mb-lg"><h4 class="card-title">Recent Activity</h4><button class="btn btn-ghost btn-sm" onclick="loadTab('fraud')">Fraud Log →</button></div>
+              <div class="table-wrap"><table class="table"><tbody id="d-recent-logs"><tr><td colspan="3" class="table-empty">No activity</td></tr></tbody></table></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── VOTERS ── -->
+        <div class="tab-panel" id="tab-voters">
+          <div class="mb-xl">
+            <div class="flex justify-between items-center flex-wrap gap-md mb-md">
+              <h3>Pending Approvals</h3>
+              <span class="badge badge-warning" id="voter-count-label"></span>
+            </div>
+            <div id="pending-list"></div>
+          </div>
+          <div>
+            <div class="flex justify-between items-center flex-wrap gap-md mb-md">
+              <h3>All Voters</h3>
+              <div class="search-bar"><span class="search-icon">🔍</span><input class="form-input" id="voter-search" placeholder="Search voters…" type="search"></div>
+            </div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Voter ID</th><th>Name</th><th>Country</th><th>National ID</th><th>Status</th><th>Voted</th><th>Actions</th></tr></thead>
+                <tbody id="voters-tbody"><tr><td colspan="7" class="table-empty">No voters</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── CANDIDATES ── -->
+        <div class="tab-panel" id="tab-candidates">
+          <div class="flex justify-between items-center mb-xl">
+            <h3>Manage Candidates</h3>
+            <button class="btn btn-primary" id="btn-add-candidate">+ Add Candidate</button>
+          </div>
+          <div id="candidates-list" style="display:flex;flex-direction:column;gap:0.85rem"></div>
+        </div>
+
+        <!-- ── ELECTION CONTROL ── -->
+        <div class="tab-panel" id="tab-election">
+          <h3 class="mb-xl">Election Lifecycle Control</h3>
+          <!-- Lifecycle timeline -->
+          <div class="elc-timeline">
+            <div class="elc-state-node" data-state="setup"><div class="node-icon">⚙️</div><div class="node-label">Setup</div></div>
+            <div class="elc-connector"></div>
+            <div class="elc-state-node" data-state="registration_open"><div class="node-icon">📋</div><div class="node-label">Reg. Open</div></div>
+            <div class="elc-connector"></div>
+            <div class="elc-state-node" data-state="election_active"><div class="node-icon">🗳️</div><div class="node-label">Active</div></div>
+            <div class="elc-connector"></div>
+            <div class="elc-state-node" data-state="election_ended"><div class="node-icon">🏁</div><div class="node-label">Ended</div></div>
+          </div>
+          <div class="grid grid-2 gap-xl">
+            <div class="card">
+              <h4 class="card-title mb-lg">Election Details</h4>
+              <div class="flex justify-between py-sm" style="border-bottom:1px solid var(--border-subtle)"><span class="text-muted text-sm">Title</span><span class="fw-600 text-sm" id="elc-title"></span></div>
+              <div class="flex justify-between py-sm" style="border-bottom:1px solid var(--border-subtle)"><span class="text-muted text-sm">Current State</span><span class="fw-600 text-sm" id="elc-state-text"></span></div>
+              <div class="flex justify-between py-sm" style="border-bottom:1px solid var(--border-subtle)"><span class="text-muted text-sm">Reg. Opened</span><span class="font-mono text-xs" id="elc-reg-opened"></span></div>
+              <div class="flex justify-between py-sm" style="border-bottom:1px solid var(--border-subtle)"><span class="text-muted text-sm">Election Started</span><span class="font-mono text-xs" id="elc-started"></span></div>
+              <div class="flex justify-between py-sm"><span class="text-muted text-sm">Election Ended</span><span class="font-mono text-xs" id="elc-ended"></span></div>
+              <div class="divider"></div>
+              <h5 class="fw-600 mb-sm text-sm">Edit Election Details</h5>
+              <div class="form-group mb-sm"><label class="form-label" for="elc-title-input">Election Title</label><input class="form-input" id="elc-title-input" type="text" placeholder="General Presidential Election 2026"></div>
+              <div class="form-group mb-md"><label class="form-label" for="elc-desc-input">Description</label><input class="form-input" id="elc-desc-input" type="text" placeholder="Election description"></div>
+              <button class="btn btn-outline btn-sm btn-block" onclick="saveElectionDetails()">&#128190; Save Details</button>
+            </div>
+            <div class="card">
+              <h4 class="card-title mb-lg">Lifecycle Actions</h4>
+              <div id="elc-btn-group" class="flex flex-col gap-md"></div>
+              <div class="divider"></div>
+              <div>
+                <div class="fw-600 mb-xs text-danger text-sm">&#9888;&#65039; Danger Zone</div>
+                <button class="btn btn-ghost btn-sm btn-block" onclick="if(confirm('Reset entire election? All data cleared.')) { StorageManager.resetVotes(); Notify.success('Election reset.'); renderElectionTab(); renderDashboard(); }">&#128260; Full Reset</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── LIVE MONITOR ── -->
+        <div class="tab-panel" id="tab-monitor">
+          <div class="flex justify-between items-center mb-xl flex-wrap gap-md">
+            <h3>Live Vote Monitor</h3>
+            <div class="flex items-center gap-md">
+              <span class="badge" id="mon-state-badge">—</span>
+              <span class="text-xs text-muted">Auto-refreshes every 3s</span>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:2rem">
+            <div class="card card-sm text-center"><div class="text-xs text-muted mb-xs">TOTAL VOTES</div><div class="font-heading fw-700 text-xl text-gradient" id="mon-votes">0</div></div>
+            <div class="card card-sm text-center"><div class="text-xs text-muted mb-xs">TURNOUT</div><div class="font-heading fw-700 text-xl text-gold" id="mon-turnout">0%</div></div>
+            <div class="card card-sm text-center"><div class="text-xs text-muted mb-xs">PENDING VOTERS</div><div class="font-heading fw-700 text-xl" style="color:var(--warning)" id="mon-pending">0</div></div>
+            <div class="card card-sm text-center"><div class="text-xs text-muted mb-xs">FRAUD ALERTS</div><div class="font-heading fw-700 text-xl text-danger" id="mon-fraud">0</div></div>
+          </div>
+          <div class="grid grid-2 gap-xl">
+            <div class="card"><h4 class="card-title mb-lg">Real-Time Tally</h4><div id="mon-bars"></div></div>
+            <div class="card"><h4 class="card-title mb-lg">Vote Activity Feed</h4><div id="mon-vote-feed"><div class="empty-state"><div class="empty-state-title">No votes yet</div></div></div></div>
+          </div>
+        </div>
+
+        <!-- ── FRAUD & ALERTS ── -->
+        <div class="tab-panel" id="tab-fraud">
+          <div class="flex justify-between items-center flex-wrap gap-md mb-lg">
+            <div>
+              <h3>Fraud &amp; Security Alerts</h3>
+              <span class="text-muted text-sm" id="fraud-count">Loading…</span>
+            </div>
+            <div class="flex gap-sm flex-wrap">
+              <select class="form-select" id="fraud-filter" style="max-width:160px">
+                <option value="">All Severities</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" onclick="if(confirm('Clear all fraud alerts?')){StorageManager.clearFraudAlerts();renderFraudTab();Notify.info('Alerts cleared.');}">Clear All</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Timestamp</th><th>Severity</th><th>Alert Type</th><th>Details</th><th>Voter ID</th><th>IP</th></tr></thead>
+              <tbody id="fraud-tbody"><tr><td colspan="6" class="table-empty">No alerts</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── RESULTS & EXPORT ── -->
+        <div class="tab-panel" id="tab-results">
+          <div class="flex justify-between items-center flex-wrap gap-md mb-lg">
+            <div>
+              <h3>Election Results</h3>
+              <p class="text-secondary text-sm">Total: <strong id="res-total-votes">0</strong> votes · Turnout: <strong id="res-turnout">0%</strong></p>
+            </div>
+            <div class="flex gap-sm">
+              <button class="btn btn-primary btn-sm" onclick="exportResults()">⬇ Export JSON</button>
+              <a href="results.html" class="btn btn-outline btn-sm">Full Dashboard →</a>
+            </div>
+          </div>
+          <div id="admin-results-list" style="display:flex;flex-direction:column;gap:0.75rem"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Candidate Add/Edit Modal -->
+  <div id="cand-modal-backdrop">
+    <div id="cand-modal">
+      <div class="flex justify-between items-center mb-xl">
+        <h3 id="cand-modal-title">Add Candidate</h3>
+        <button class="modal-close" style="position:static" id="btn-close-cand-modal">×</button>
+      </div>
+      <form id="cand-form">
+        <div class="form-row mb-md">
+          <div class="form-group"><label class="form-label">Full Name *</label><input class="form-input" id="cand-name" type="text" placeholder="Candidate Name" required></div>
+          <div class="form-group"><label class="form-label">Party *</label><input class="form-input" id="cand-party" type="text" placeholder="Party Name" required></div>
+        </div>
+        <div class="form-row mb-md">
+          <div class="form-group"><label class="form-label">Party Code</label><input class="form-input" id="cand-partycode" type="text" placeholder="e.g. PA" maxlength="4"></div>
+          <div class="form-group"><label class="form-label">Number</label><input class="form-input" id="cand-number" type="number" min="1" value="1"></div>
+        </div>
+        <div class="form-row mb-md">
+          <div class="form-group"><label class="form-label">Symbol / Emoji</label><input class="form-input" id="cand-symbol" type="text" placeholder="⚡" maxlength="4"></div>
+          <div class="form-group"><label class="form-label">Color</label><input class="form-input" id="cand-color" type="color" value="#00d4ff" style="height:46px;padding:4px;cursor:pointer"></div>
+        </div>
+        <div class="form-group mb-lg"><label class="form-label">Platform / Description</label><textarea class="form-textarea" id="cand-platform" placeholder="Candidate platform statement…" rows="3"></textarea></div>
+        <div class="flex gap-md">
+          <button type="button" class="btn btn-ghost flex-1" id="btn-close-cand-modal-2" onclick="closeCandModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary flex-1">Save Candidate</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script src="js/admin.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Update pending badge
+      const updatePendingBadge = () => {
+        const n = StorageManager.getPendingVoters().length;
+        const el = document.getElementById('pending-badge');
+        if (el) el.textContent = n > 0 ? n : '';
+      };
+      setInterval(updatePendingBadge, 2000);
+      updatePendingBadge();
+    });
+  </script>
+</body>
+</html>
