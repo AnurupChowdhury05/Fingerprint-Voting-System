@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voter Registration — SecureVote</title>
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/scanner.css">
+  <link rel="stylesheet" href="css/components.css">
+  <!-- FAANG CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <style>
+    .reg-wrap { max-width: 820px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+    .step-panel { animation: fadeInUp 0.4s ease both; }
+    .shake { animation: scanFailShake .4s ease; }
+    @keyframes scanFailShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(7px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+
+    /* ID Drop Zone */
+    .id-drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius-lg);
+      padding: 2.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all var(--t-normal);
+    }
+    .id-drop-zone:hover { border-color: var(--primary); background: var(--primary-dim); }
+    #id-preview-wrap { display:none; margin-top:1rem; border-radius:var(--radius-md); overflow:hidden; border:1px solid var(--border); }
+    #id-preview { width:100%; max-height:220px; object-fit:contain; background:var(--bg-tertiary); }
+
+    /* Dup check log */
+    #dup-check-log { max-height: 280px; overflow-y:auto; background:var(--bg-tertiary); border-radius:var(--radius-md); padding:1rem; border:1px solid var(--border-subtle); font-family:var(--font-mono); font-size:.8rem; }
+    #dup-check-status { font-family:var(--font-mono); font-size:1rem; font-weight:700; text-align:center; margin-top:.75rem; letter-spacing:.1em; }
+  </style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+  <div class="scanline-overlay"></div>
+  <!-- Top progress bar -->
+  <div class="top-progress" style="top:70px;z-index:101"><div class="top-progress-fill" id="top-prog" style="width:20%"></div></div>
+
+  <nav class="nav">
+    <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit"><div class="brand-icon">🖐️</div><span>SECURE<span class="text-gradient">VOTE</span></span></a>
+    <div class="nav-links">
+      <a href="vote.html"    class="nav-link">🗳️ Vote</a>
+      <a href="results.html" class="nav-link">📊 Results</a>
+      <a href="index.html"   class="nav-link">← Home</a>
+    </div>
+  </nav>
+
+  <div class="page-content">
+    <div class="reg-wrap">
+      <div style="padding-top:2rem;margin-bottom:2rem">
+        <div class="eyebrow mb-sm">📋 Voter Registration</div>
+        <h1>Register <span class="text-gradient">Your Biometrics</span></h1>
+        <p class="text-secondary mt-xs">Complete all steps to register. Your application will be reviewed by an administrator.</p>
+      </div>
+
+      <!-- Steps Indicator -->
+      <div class="steps mb-2xl">
+        <div class="step active" data-step="1"><div class="step-circle">1</div><span class="step-label">Personal Info</span></div>
+        <div class="step-connector"></div>
+        <div class="step" data-step="2"><div class="step-circle">2</div><span class="step-label">ID Proof</span></div>
+        <div class="step-connector"></div>
+        <div class="step" data-step="3"><div class="step-circle">3</div><span class="step-label">Fingerprint</span></div>
+        <div class="step-connector"></div>
+        <div class="step" data-step="4"><div class="step-circle">4</div><span class="step-label">Verification</span></div>
+        <div class="step-connector"></div>
+        <div class="step" data-step="5"><div class="step-circle">5</div><span class="step-label">Confirm</span></div>
+      </div>
+
+      <div id="reg-main">
+        <!-- STEP 1: Personal Info -->
+        <div class="step-panel" id="step-panel-1">
+          <div class="card card-lg">
+            <div class="card-header mb-lg"><h3 class="card-title">Personal Information</h3><span class="badge badge-primary">Step 1 of 5</span></div>
+            <div class="form-row mb-md">
+              <div class="form-group"><label class="form-label" for="f-name">Full Name *</label><input class="form-input" id="f-name" type="text" placeholder="John Smith" required></div>
+              <div class="form-group"><label class="form-label" for="f-dob">Date of Birth *</label><input class="form-input" id="f-dob" type="date" required></div>
+            </div>
+            <div class="form-row mb-md">
+              <div class="form-group">
+                <label class="form-label" for="f-country">Country *</label>
+                <select class="form-select" id="f-country" required><option value="">Select Country</option></select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="f-gender">Gender</label>
+                <select class="form-select" id="f-gender">
+                  <option value="">Prefer not to say</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Non-binary">Non-binary</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row mb-md">
+              <div class="form-group"><label class="form-label" for="f-nid">National ID / Passport No. *</label><input class="form-input" id="f-nid" type="text" placeholder="NID-123456789" required></div>
+              <div class="form-group"><label class="form-label" for="f-email">Email Address *</label><input class="form-input" id="f-email" type="email" placeholder="you@example.com" required></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label" for="f-phone">Phone</label><input class="form-input" id="f-phone" type="tel" placeholder="+1 555-000-0000"></div>
+              <div class="form-group"><label class="form-label" for="f-address">Address</label><input class="form-input" id="f-address" type="text" placeholder="123 Main St, City"></div>
+            </div>
+            <div class="alert alert-info mt-lg"><span class="alert-icon">🔒</span><span>All data stays on this device and is never transmitted to external servers.</span></div>
+          </div>
+        </div>
+
+        <!-- STEP 2: ID Proof -->
+        <div class="step-panel" id="step-panel-2" style="display:none">
+          <div class="card card-lg">
+            <div class="card-header mb-lg"><h3 class="card-title">Upload ID Proof</h3><span class="badge badge-primary">Step 2 of 5</span></div>
+            <div class="form-group mb-lg">
+              <label class="form-label" for="f-doc-type">Document Type *</label>
+              <select class="form-select" id="f-doc-type" required>
+                <option value="">Select document type</option>
+                <option value="National ID Card">National ID Card</option>
+                <option value="Passport">Passport</option>
+                <option value="Driver's License">Driver's License</option>
+                <option value="Voter Card">Voter Card</option>
+                <option value="Government ID">Government ID</option>
+              </select>
+            </div>
+            <div class="id-drop-zone" id="id-drop-zone">
+              <input type="file" id="f-id-file" accept="image/*,.pdf" style="display:none">
+              <div style="font-size:2.5rem;margin-bottom:0.75rem">🪪</div>
+              <div class="fw-600 mb-xs">Click to upload or drag & drop</div>
+              <div class="text-secondary text-sm">JPG, PNG, or PDF · Max 5MB</div>
+            </div>
+            <div id="id-preview-wrap"><img id="id-preview" src="" alt="ID Preview"></div>
+            <div class="alert alert-info mt-lg"><span class="alert-icon">🔒</span><span>Your ID proof is stored locally on this device only, for verification purposes.</span></div>
+          </div>
+        </div>
+
+        <!-- STEP 3: Fingerprint -->
+        <div class="step-panel" id="step-panel-3" style="display:none">
+          <div class="card card-lg" style="text-align:center">
+            <div class="card-header mb-lg" style="flex-direction:column;gap:.5rem">
+              <h3 class="card-title">Biometric Capture</h3>
+              <p class="text-secondary text-sm">Click the sensor to scan your fingerprint</p>
+              <span class="badge badge-primary">Step 3 of 5</span>
+            </div>
+            <div class="scanner-wrap" data-scanner-id="reg-scan-canvas">
+              <div class="scanner-frame" data-state="idle">
+                <canvas id="reg-scan-canvas"></canvas>
+                <div class="scan-beam"></div>
+                <div class="scanner-overlay"></div>
+                <div class="scanner-frame-tl"></div>
+                <div class="scanner-frame-br"></div>
+              </div>
+              <div class="data-stream" id="data-stream"></div>
+              <div class="scanner-status">
+                <div class="scanner-status-text">PLACE FINGER ON SENSOR</div>
+                <div class="scanner-hint">Click the sensor to begin scan</div>
+              </div>
+            </div>
+            <div id="scan-result" class="mt-lg text-left" style="display:none;max-width:500px;margin:1.5rem auto 0"></div>
+          </div>
+        </div>
+
+        <!-- STEP 4: Duplicate Check (auto-run) -->
+        <div class="step-panel" id="step-panel-4" style="display:none">
+          <div class="card card-lg" style="text-align:center">
+            <div class="card-header mb-lg" style="flex-direction:column;gap:.5rem">
+              <h3 class="card-title">🔍 Identity Verification</h3>
+              <p class="text-secondary text-sm">Checking for duplicates across the voter registry…</p>
+              <span class="badge badge-primary">Step 4 of 5</span>
+            </div>
+            <div id="dup-check-log"></div>
+            <div id="dup-check-status" class="mt-md text-muted">INITIALIZING…</div>
+            <div id="dup-error" class="alert alert-danger mt-lg text-left" style="display:none">
+              <span class="alert-icon">⚠️</span>
+              <div><div class="fw-600">Duplicate Detected</div>This identity is already registered. You cannot register twice.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 5: Confirm -->
+        <div class="step-panel" id="step-panel-5" style="display:none">
+          <div id="confirm-summary"></div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="flex gap-md mt-xl justify-between">
+          <button class="btn btn-ghost" id="btn-step-back" style="display:none">← Back</button>
+          <div class="flex gap-md" style="margin-left:auto">
+            <button class="btn btn-primary" id="btn-step-next"><span class="btn-text">Continue →</span></button>
+            <button class="btn btn-success btn-lg" id="btn-submit" style="display:none"><span class="btn-text">✓ Submit Registration</span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUCCESS SCREEN -->
+      <div id="reg-success" style="display:none;flex-direction:column;align-items:center;text-align:center;padding:3rem 0">
+        <div style="width:100px;height:100px;border-radius:50%;background:var(--warning-dim);border:2px solid var(--warning);display:flex;align-items:center;justify-content:center;font-size:3rem;box-shadow:0 0 40px rgba(255,157,0,.3);animation:float 3s ease-in-out infinite;margin-bottom:2rem">⏳</div>
+        <div class="eyebrow mb-md">Registration Submitted</div>
+        <h2>Thank you, <span class="text-gradient" id="suc-name">Voter</span>!</h2>
+        <p class="text-secondary mt-md mb-xl" style="max-width:440px;line-height:1.8">Your registration is <strong style="color:var(--warning)">pending admin approval</strong>. Once approved, you will receive a Voter ID to cast your vote.</p>
+        <div class="card card-sm flex items-center gap-md flex-wrap" style="border-color:rgba(0,212,255,.2);margin-bottom:2rem">
+          <div style="width:70px;height:70px;border-radius:50%;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0" id="reg-qr"></div>
+          <div style="flex:1">
+            <div class="fw-600" id="suc-name">Voter</div>
+            <div class="flex gap-md">
+              <span class="font-mono text-xs text-muted" id="suc-nid"></span>
+              <span class="badge badge-primary text-xs" id="suc-country"></span>
+            </div>
+          </div>
+          <span class="badge badge-warning badge-pulse">Pending Approval</span>
+        </div>
+        <div class="flex gap-md flex-wrap justify-center">
+          <a href="index.html" class="btn btn-primary">← Back to Home</a>
+          <a href="admin.html" class="btn btn-ghost">Admin Panel →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script src="js/scanner.js"></script>
+  <script src="js/register.js"></script>
+</body>
+</html>
