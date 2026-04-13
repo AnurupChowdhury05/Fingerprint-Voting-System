@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SecureVote — Advanced Biometric Election Platform</title>
+  <meta name="description" content="State-of-the-art fingerprint biometric voting. SHA-256 secured, tamper-proof, and fully transparent.">
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components.css">
+  <style>
+    /* ── Landing-specific ── */
+    body { overflow-x: hidden; }
+    /* Hamburger */
+    .hamburger { display:none; flex-direction:column; gap:5px; cursor:pointer; padding:4px; }
+    .hamburger span { width:24px; height:2px; background:var(--text-secondary); border-radius:2px; transition:all .3s ease; }
+    .mobile-nav { display:none; position:fixed; inset:0; z-index:200; background:rgba(2,9,23,.97); backdrop-filter:blur(20px); flex-direction:column; align-items:center; justify-content:center; gap:2rem; }
+    .mobile-nav.open { display:flex; animation:fadeIn .3s ease; }
+    .mobile-nav a { font-family:var(--font-heading); font-size:2rem; font-weight:700; color:var(--text-primary); letter-spacing:.08em; text-transform:uppercase; transition:color .2s; }
+    .mobile-nav a:hover { color:var(--primary); }
+    .mobile-nav-close { position:absolute; top:1.5rem; right:1.5rem; font-size:2rem; color:var(--text-muted); cursor:pointer; background:none; border:none; }
+    @media(max-width:768px){ .hamburger{display:flex;} .nav-links{display:none;} }
+
+    /* ── HERO ── */
+    .hero { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:2rem; position:relative; text-align:center; }
+    .hero-fp-wrap { position:relative; width:160px; height:160px; margin:0 auto 2.5rem; }
+    .hero-fp-wrap canvas { width:100%; height:100%; border-radius:50%; display:block; }
+    .orbit { position:absolute; border-radius:50%; border:1.5px solid; pointer-events:none; }
+    .orbit-1 { inset:-16px; border-color:rgba(0,212,255,.2); animation:spin-slow 10s linear infinite; }
+    .orbit-1::before { content:''; position:absolute; top:-4px; left:50%; transform:translateX(-50%); width:8px; height:8px; border-radius:50%; background:var(--primary); box-shadow:0 0 12px var(--primary); }
+    .orbit-2 { inset:-32px; border-color:rgba(123,47,255,.12); animation:spin-slow 18s linear infinite reverse; }
+    .orbit-2::before { content:''; position:absolute; bottom:-4px; right:20%; width:6px; height:6px; border-radius:50%; background:var(--secondary); box-shadow:0 0 10px var(--secondary); }
+    .orbit-3 { inset:-48px; border-color:rgba(255,215,0,.07); animation:spin-slow 26s linear infinite; }
+
+    /* Word reveal */
+    .word-reveal .word { display:inline-block; opacity:0; transform:translateY(24px); animation:wordUp .55s cubic-bezier(.34,1.56,.64,1) both; }
+    @keyframes wordUp { to { opacity:1; transform:translateY(0); } }
+
+    /* ── STATS BAR ── */
+    .stats-bar { background:rgba(10,22,40,.9); border-top:1px solid var(--border-subtle); border-bottom:1px solid var(--border-subtle); padding:.75rem 0; backdrop-filter:blur(12px); overflow:hidden; }
+    .stats-bar-inner { display:flex; align-items:center; gap:3rem; justify-content:center; flex-wrap:wrap; padding:0 2rem; }
+    .stat-item { display:flex; align-items:center; gap:.6rem; }
+    .stat-item-icon { font-size:1.1rem; }
+    .stat-item-value { font-family:var(--font-heading); font-weight:700; font-size:1.2rem; }
+    .stat-item-label { font-size:.75rem; color:var(--text-muted); letter-spacing:.06em; text-transform:uppercase; }
+
+    /* ── HOW IT WORKS ── */
+    .hiw-section { padding:6rem 2rem; max-width:900px; margin:0 auto; }
+    .hiw-steps { display:flex; align-items:flex-start; gap:0; position:relative; }
+    .hiw-step { flex:1; text-align:center; padding:0 1rem; position:relative; z-index:1; }
+    .hiw-icon { width:72px; height:72px; border-radius:50%; margin:0 auto 1.25rem; display:flex; align-items:center; justify-content:center; font-size:1.8rem; border:2px solid; transition:all .3s; }
+    .hiw-step:hover .hiw-icon { transform:translateY(-6px); box-shadow:0 16px 32px rgba(0,0,0,.3); }
+    .hiw-connector { flex:1; height:2px; background:linear-gradient(90deg, transparent, var(--border), transparent); margin-top:36px; flex-shrink:1; min-width:30px; }
+    @media(max-width:640px){ .hiw-steps{flex-direction:column;align-items:center;} .hiw-connector{width:2px;height:30px;background:linear-gradient(180deg,transparent,var(--border),transparent);margin:0 0 0 0;} }
+
+    /* ── SECTION CARDS (3D tilt) ── */
+    .section-cards { display:grid; grid-template-columns:repeat(2,1fr); gap:1.5rem; max-width:900px; margin:0 auto; padding:0 2rem 6rem; }
+    @media(max-width:640px){ .section-cards{grid-template-columns:1fr;padding:0 1rem 4rem;} }
+    .s-card { background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:var(--radius-xl); padding:2rem; cursor:pointer; transition:border-color .3s,box-shadow .3s; position:relative; overflow:hidden; text-decoration:none; color:inherit; display:flex; flex-direction:column; gap:1rem; transform-style:preserve-3d; will-change:transform; }
+    .s-card:hover { color:inherit; }
+    .s-card-bg { position:absolute; inset:0; opacity:0; transition:opacity .3s; background:radial-gradient(circle at top right, var(--card-accent,rgba(0,212,255,.12)), transparent 60%); pointer-events:none; }
+    .s-card:hover .s-card-bg { opacity:1; }
+    .s-card-icon { width:60px; height:60px; border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; font-size:1.6rem; border:1px solid; flex-shrink:0; }
+    .s-card-title { font-family:var(--font-heading); font-size:1.3rem; font-weight:700; }
+    .s-card-desc { font-size:.85rem; color:var(--text-secondary); line-height:1.7; flex:1; }
+    .s-card-flow { font-family:var(--font-mono); font-size:.68rem; color:var(--text-muted); letter-spacing:.04em; line-height:1.8; }
+    .s-card-stat { display:flex; align-items:center; justify-content:space-between; margin-top:auto; padding:.65rem .9rem; border-radius:var(--radius-sm); }
+    .s-card-stat-label { font-size:.68rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.08em; }
+    .s-card-stat-value { font-family:var(--font-heading); font-size:1.1rem; font-weight:700; }
+    .s-card.admin    { --card-color:var(--secondary); }
+    .s-card.register { --card-color:var(--primary); }
+    .s-card.vote     { --card-color:var(--success); }
+    .s-card.results  { --card-color:var(--accent); }
+    .s-card:hover { border-color:var(--card-color); box-shadow:0 0 40px color-mix(in srgb, var(--card-color) 30%, transparent); }
+
+    /* ── SECURITY STRIP ── */
+    .security-strip { border-top:1px solid var(--border-subtle); background:rgba(10,22,40,.6); padding:1.25rem 0; overflow:hidden; }
+    .security-track { display:flex; gap:3rem; animation:scrollLeft 25s linear infinite; white-space:nowrap; }
+    .security-track:hover { animation-play-state:paused; }
+    .security-item { display:flex; align-items:center; gap:.5rem; font-size:.78rem; color:var(--text-muted); letter-spacing:.06em; flex-shrink:0; }
+    .security-item .dot { width:6px; height:6px; border-radius:50%; background:var(--success); flex-shrink:0; }
+    @keyframes scrollLeft { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+
+    /* ── FOOTER ── */
+    .footer { border-top:1px solid var(--border-subtle); padding:2rem; text-align:center; }
+
+    /* ── Particles canvas ── */
+    #particles { position:fixed; inset:0; z-index:0; pointer-events:none; }
+    .page-content { position:relative; z-index:2; }
+
+    /* ── CTA Buttons ── */
+    .hero-ctas { display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; margin-top:2.5rem; }
+  </style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+  <div class="scanline-overlay"></div>
+  <canvas id="particles"></canvas>
+
+  <!-- ── NAV ── -->
+  <nav class="nav" style="position:fixed;top:0;width:100%;z-index:100">
+    <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit">
+      <div class="brand-icon">🖐️</div>
+      <span>SECURE<span class="text-gradient">VOTE</span></span>
+    </a>
+    <div class="nav-links">
+      <span id="nav-state-badge" class="badge badge-warning" style="font-size:.65rem;margin-right:.5rem">Loading…</span>
+      <a href="register.html" class="nav-link">Register</a>
+      <a href="vote.html"     class="nav-link">Vote</a>
+      <a href="results.html"  class="nav-link">Results</a>
+      <a href="admin.html"    class="btn btn-secondary btn-sm" style="margin-left:.5rem">Admin</a>
+    </div>
+    <!-- Hamburger -->
+    <div class="hamburger" id="hamburger" onclick="document.getElementById('mobile-nav').classList.add('open')">
+      <span></span><span></span><span></span>
+    </div>
+  </nav>
+
+  <!-- Mobile Nav -->
+  <div class="mobile-nav" id="mobile-nav">
+    <button class="mobile-nav-close" onclick="document.getElementById('mobile-nav').classList.remove('open')">×</button>
+    <a href="register.html" onclick="document.getElementById('mobile-nav').classList.remove('open')">Register</a>
+    <a href="vote.html"     onclick="document.getElementById('mobile-nav').classList.remove('open')">Vote</a>
+    <a href="results.html"  onclick="document.getElementById('mobile-nav').classList.remove('open')">Results</a>
+    <a href="admin.html"    onclick="document.getElementById('mobile-nav').classList.remove('open')">Admin</a>
+  </div>
+
+  <div class="page-content" style="padding-top:70px">
+
+    <!-- ── HERO ── -->
+    <section class="hero">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+
+      <!-- Fingerprint Globe -->
+      <div class="hero-fp-wrap">
+        <div class="orbit orbit-1"></div>
+        <div class="orbit orbit-2"></div>
+        <div class="orbit orbit-3"></div>
+        <canvas id="hero-fp" width="160" height="160"></canvas>
+      </div>
+
+      <div class="eyebrow" style="margin-bottom:1.25rem">🔒 BIOMETRIC ELECTION PLATFORM · ENTERPRISE GRADE</div>
+
+      <h1 style="max-width:720px;margin:0 auto 1.25rem" id="hero-headline">
+        <span class="word-reveal text-gradient">Democratic</span>
+        <span style="display:inline"> </span>
+        <span class="word-reveal">Voting,</span>
+        <br>
+        <span class="word-reveal">Secured</span>
+        <span style="display:inline"> </span>
+        <span class="word-reveal">by</span>
+        <span style="display:inline"> </span>
+        <span class="word-reveal text-gradient">Science</span>
+      </h1>
+
+      <p class="text-secondary" style="max-width:540px;margin:0 auto;font-size:1.05rem;line-height:1.85" id="hero-sub">
+        End-to-end SHA-256 biometric fingerprint verification ensures one person, one vote — tamper-proof, transparent, and fully private.
+      </p>
+
+      <div class="hero-ctas">
+        <a href="vote.html"     class="btn btn-primary btn-xl">🗳️ Cast Your Vote</a>
+        <a href="register.html" class="btn btn-outline btn-xl">📋 Register Now</a>
+      </div>
+    </section>
+
+    <!-- ── LIVE STATS BAR ── -->
+    <div class="stats-bar">
+      <div class="stats-bar-inner">
+        <div class="stat-item">
+          <span class="stat-item-icon">👥</span>
+          <div>
+            <div class="stat-item-value text-gradient" id="sb-registered">0</div>
+            <div class="stat-item-label">Registered</div>
+          </div>
+        </div>
+        <div class="stat-item">
+          <span class="stat-item-icon">✅</span>
+          <div>
+            <div class="stat-item-value text-success" id="sb-voted">0</div>
+            <div class="stat-item-label">Voted</div>
+          </div>
+        </div>
+        <div class="stat-item">
+          <span class="stat-item-icon">📈</span>
+          <div>
+            <div class="stat-item-value text-gold" id="sb-turnout">0%</div>
+            <div class="stat-item-label">Turnout</div>
+          </div>
+        </div>
+        <div class="stat-item">
+          <span class="stat-item-icon">⏳</span>
+          <div>
+            <div class="stat-item-value" style="color:var(--warning)" id="sb-pending">0</div>
+            <div class="stat-item-label">Pending</div>
+          </div>
+        </div>
+        <div class="stat-item">
+          <span class="stat-item-icon">🚨</span>
+          <div>
+            <div class="stat-item-value text-danger" id="sb-fraud">0</div>
+            <div class="stat-item-label">Fraud Alerts</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── HOW IT WORKS ── -->
+    <section>
+      <div class="hiw-section">
+        <div class="section-header">
+          <div class="section-label">How It Works</div>
+          <h2>Three Steps to a <span class="text-gradient">Secure Election</span></h2>
+        </div>
+        <div class="hiw-steps stagger">
+          <div class="hiw-step">
+            <div class="hiw-icon" style="background:var(--primary-dim);border-color:rgba(0,212,255,.3);color:var(--primary)">📋</div>
+            <h4 style="margin-bottom:.5rem">1. Register</h4>
+            <p class="text-secondary text-sm">Submit your details, upload ID proof and capture your fingerprint. Await admin approval to receive your Voter ID.</p>
+          </div>
+          <div class="hiw-connector"></div>
+          <div class="hiw-step">
+            <div class="hiw-icon" style="background:var(--secondary-dim);border-color:rgba(123,47,255,.3);color:var(--secondary)">🔐</div>
+            <h4 style="margin-bottom:.5rem">2. Authenticate</h4>
+            <p class="text-secondary text-sm">Enter your Voter ID, scan your fingerprint for biometric verification. Our system cross-checks against the encrypted registry.</p>
+          </div>
+          <div class="hiw-connector"></div>
+          <div class="hiw-step">
+            <div class="hiw-icon" style="background:var(--success-dim);border-color:rgba(0,255,136,.3);color:var(--success)">🗳️</div>
+            <h4 style="margin-bottom:.5rem">3. Vote</h4>
+            <p class="text-secondary text-sm">Select your candidate, confirm your choice and receive a tamper-proof receipt. Results update in real time.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 4 SECTION CARDS ── -->
+    <div class="section-cards stagger">
+
+      <a href="admin.html" class="s-card admin">
+        <div class="s-card-bg"></div>
+        <div class="s-card-icon" style="background:var(--secondary-dim);border-color:rgba(123,47,255,.3)">⚙️</div>
+        <div>
+          <div class="s-card-title">Admin Panel</div>
+          <div class="s-card-desc">Full election lifecycle — approve voters, manage candidates, control election state, monitor live voting, detect fraud.</div>
+        </div>
+        <div class="s-card-flow">Login → Manage Voters → Candidates<br>→ Open Registration → Start Election<br>→ Monitor → Detect Fraud → End</div>
+        <div class="s-card-stat" style="background:var(--secondary-dim)">
+          <span class="s-card-stat-label">Pending Approvals</span>
+          <span class="s-card-stat-value" style="color:var(--secondary)" id="sc-pending">—</span>
+        </div>
+      </a>
+
+      <a href="register.html" class="s-card register">
+        <div class="s-card-bg" style="--card-accent:rgba(0,212,255,.12)"></div>
+        <div class="s-card-icon" style="background:var(--primary-dim);border-color:rgba(0,212,255,.3)">📋</div>
+        <div>
+          <div class="s-card-title">New Registration</div>
+          <div class="s-card-desc">Register your biometrics — personal details, government ID upload, fingerprint capture, and duplicate identity check.</div>
+        </div>
+        <div class="s-card-flow">Enter Details → Upload ID Proof<br>→ Fingerprint Capture → Dup. Check<br>→ Generate Voter ID → Admin Approval</div>
+        <div class="s-card-stat" style="background:var(--primary-dim)">
+          <span class="s-card-stat-label">Registered Voters</span>
+          <span class="s-card-stat-value" style="color:var(--primary)" id="sc-voters">—</span>
+        </div>
+      </a>
+
+      <a href="vote.html" class="s-card vote">
+        <div class="s-card-bg" style="--card-accent:rgba(0,255,136,.12)"></div>
+        <div class="s-card-icon" style="background:var(--success-dim);border-color:rgba(0,255,136,.3)">🗳️</div>
+        <div>
+          <div class="s-card-title">Cast Your Vote</div>
+          <div class="s-card-desc">Biometric authentication via fingerprint scan. One person, one vote — enforced cryptographically, zero exceptions.</div>
+        </div>
+        <div class="s-card-flow">Country + Voter ID → Fingerprint Scan<br>→ Match? → Already Voted Check<br>→ Select Candidate → Confirm → Receipt</div>
+        <div class="s-card-stat" style="background:var(--success-dim)">
+          <span class="s-card-stat-label">Election Status</span>
+          <span class="s-card-stat-value" style="color:var(--success)" id="sc-state">—</span>
+        </div>
+      </a>
+
+      <a href="results.html" class="s-card results">
+        <div class="s-card-bg" style="--card-accent:rgba(255,215,0,.12)"></div>
+        <div class="s-card-icon" style="background:var(--accent-dim);border-color:rgba(255,215,0,.3)">📊</div>
+        <div>
+          <div class="s-card-title">Live Results</div>
+          <div class="s-card-desc">Real-time vote aggregation with animated race charts, turnout analytics, and winner announcements. Auto-refreshes every 10s.</div>
+        </div>
+        <div class="s-card-flow">Votes Cast → DB Storage<br>→ Backend Aggregates → API<br>→ Dashboard Updates → Live Charts</div>
+        <div class="s-card-stat" style="background:var(--accent-dim)">
+          <span class="s-card-stat-label">Total Votes Cast</span>
+          <span class="s-card-stat-value text-gold" id="sc-votes">—</span>
+        </div>
+      </a>
+
+    </div>
+
+    <!-- ── SECURITY STRIP ── -->
+    <div class="security-strip">
+      <div class="security-track" id="security-track">
+        <!-- doubled for seamless loop -->
+        <div class="security-item"><span class="dot"></span>SHA-256 Biometric Hashing</div>
+        <div class="security-item"><span class="dot"></span>Zero Data Transmission</div>
+        <div class="security-item"><span class="dot"></span>End-to-End Encrypted</div>
+        <div class="security-item"><span class="dot"></span>Tamper-Proof Audit Log</div>
+        <div class="security-item"><span class="dot"></span>One Person · One Vote</div>
+        <div class="security-item"><span class="dot"></span>Real-Time Fraud Detection</div>
+        <div class="security-item"><span class="dot"></span>Admin-Gated Approval Flow</div>
+        <div class="security-item"><span class="dot"></span>Cryptographic Vote Receipt</div>
+        <div class="security-item"><span class="dot"></span>SHA-256 Biometric Hashing</div>
+        <div class="security-item"><span class="dot"></span>Zero Data Transmission</div>
+        <div class="security-item"><span class="dot"></span>End-to-End Encrypted</div>
+        <div class="security-item"><span class="dot"></span>Tamper-Proof Audit Log</div>
+        <div class="security-item"><span class="dot"></span>One Person · One Vote</div>
+        <div class="security-item"><span class="dot"></span>Real-Time Fraud Detection</div>
+        <div class="security-item"><span class="dot"></span>Admin-Gated Approval Flow</div>
+        <div class="security-item"><span class="dot"></span>Cryptographic Vote Receipt</div>
+      </div>
+    </div>
+
+    <!-- ── FOOTER ── -->
+    <footer class="footer">
+      <div class="nav-brand" style="justify-content:center;margin-bottom:.75rem">
+        <div class="brand-icon" style="width:30px;height:30px;font-size:.9rem">🖐️</div>
+        <span class="font-heading fw-700" style="font-size:1rem;letter-spacing:.08em">SECURE<span class="text-gradient">VOTE</span></span>
+      </div>
+      <p class="text-muted text-xs">Advanced Biometric Election Platform · All data stored locally · Open source demo</p>
+    </footer>
+
+  </div><!-- /page-content -->
+
+  <script src="js/app.js"></script>
+  <script>
+    // ── Live stats ──
+    (function() {
+      const stats = StorageManager.getStats();
+      const upd = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+      const countUp = (id, target) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        let n = 0, step = Math.max(1, Math.floor(target / 30));
+        const t = setInterval(() => { n = Math.min(n + step, target); el.textContent = n; if (n >= target) clearInterval(t); }, 40);
+      };
+      countUp('sb-registered', stats.totalRegistered);
+      countUp('sb-voted',      stats.voted);
+      countUp('sb-pending',    stats.pending);
+      countUp('sb-fraud',      stats.fraudAlerts);
+      document.getElementById('sb-turnout').textContent = stats.turnout + '%';
+      upd('sc-pending', stats.pending);
+      upd('sc-voters',  stats.totalRegistered);
+      upd('sc-votes',   stats.totalVotes);
+      upd('sc-state',   ElectionState.label(stats.electionState).toUpperCase());
+      // Nav badge
+      const nb = document.getElementById('nav-state-badge');
+      if (nb) { nb.textContent = ElectionState.label(stats.electionState); nb.className = `badge ${ElectionState.badgeClass(stats.electionState)}`; }
+    })();
+
+    // ── Hero FP animation ──
+    (function(){
+      const c = document.getElementById('hero-fp'), ctx = c.getContext('2d');
+      const W = c.width, H = c.height, cx = W/2, cy = H/2;
+      let t = 0;
+      function draw() {
+        ctx.clearRect(0,0,W,H);
+        const bg = ctx.createRadialGradient(cx,cy,0,cx,cy,W/2);
+        bg.addColorStop(0,'#0d1f3a'); bg.addColorStop(1,'#020917');
+        ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(cx,cy,W/2,0,Math.PI*2); ctx.fill();
+        // Ridges
+        for (let i = 1; i <= 11; i++) {
+          const alpha = 0.4 + Math.sin(t*0.03 + i*0.2)*0.12;
+          ctx.strokeStyle = `rgba(0,212,255,${alpha})`;
+          ctx.lineWidth = 1.2 + (i===6?0.4:0);
+          const rx = 6 + i*5.8, ry = 8 + i*7, w = Math.sin(t*0.025+i*0.5)*2.5;
+          ctx.beginPath(); ctx.ellipse(cx+w*0.4, cy+w*0.2, rx, ry, 0.1, 0, Math.PI*2); ctx.stroke();
+        }
+        // Core (purple)
+        ctx.strokeStyle = `rgba(123,47,255,${0.6+Math.sin(t*.05)*.2})`;
+        ctx.lineWidth = 1.4;
+        for(let j=1;j<=4;j++){ctx.beginPath();ctx.ellipse(cx,cy,j*4,j*5,0,0,Math.PI*2);ctx.stroke();}
+        // Scan line
+        const sy = cy - 65 + ((t*1.4)%130);
+        const sg = ctx.createLinearGradient(cx-70,sy,cx+70,sy);
+        sg.addColorStop(0,'transparent'); sg.addColorStop(.5,`rgba(0,212,255,${0.5+Math.sin(t*.04)*.15})`); sg.addColorStop(1,'transparent');
+        ctx.fillStyle = sg; ctx.fillRect(cx-70,sy,140,2);
+        t++; requestAnimationFrame(draw);
+      }
+      draw();
+    })();
+
+    // ── Particle field ──
+    (function(){
+      const canvas = document.getElementById('particles'), ctx = canvas.getContext('2d');
+      let w, h, ps = [];
+      const resize = () => { w=canvas.width=window.innerWidth; h=canvas.height=window.innerHeight; };
+      resize(); window.addEventListener('resize', resize);
+      for(let i=0;i<60;i++) ps.push({x:Math.random()*1920,y:Math.random()*1080,r:Math.random()*1.5+.3,vx:(Math.random()-.5)*.22,vy:(Math.random()-.5)*.22,a:Math.random()*.6+.1});
+      function run(){
+        ctx.clearRect(0,0,w,h);
+        ps.forEach(p=>{
+          p.x+=p.vx; p.y+=p.vy;
+          if(p.x<0)p.x=w; if(p.x>w)p.x=0; if(p.y<0)p.y=h; if(p.y>h)p.y=0;
+          ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+          ctx.fillStyle=`rgba(0,212,255,${p.a*.4})`; ctx.fill();
+        });
+        requestAnimationFrame(run);
+      }
+      run();
+    })();
+
+    // ── Word reveal stagger ──
+    document.querySelectorAll('.word-reveal').forEach((el, i) => {
+      el.style.animationDelay = (0.3 + i * 0.12) + 's';
+    });
+
+    // ── 3D Tilt Cards ──
+    document.querySelectorAll('.s-card').forEach(card => {
+      card.addEventListener('mousemove', e => {
+        const r = card.getBoundingClientRect();
+        const x = (e.clientX - r.left) / r.width - 0.5;
+        const y = (e.clientY - r.top)  / r.height - 0.5;
+        card.style.transform = `perspective(1000px) rotateY(${x*14}deg) rotateX(${y*-14}deg) translateY(-8px) scale(1.01)`;
+      });
+      card.addEventListener('mouseleave', () => {
+        card.style.transition = 'transform 0.6s cubic-bezier(0.34,1.56,0.64,1), border-color 0.3s, box-shadow 0.3s';
+        card.style.transform = '';
+        setTimeout(()=>card.style.transition='', 600);
+      });
+      card.addEventListener('mouseenter', () => { card.style.transition = 'transform 0.08s ease, border-color 0.3s, box-shadow 0.3s'; });
+    });
+
+    // ── Stagger cards on scroll ──
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if(e.isIntersecting) { e.target.querySelectorAll('.s-card, .hiw-step').forEach((c,i)=>{ c.style.animationDelay=(i*0.1)+'s'; c.classList.add('anim-fade-up'); }); io.unobserve(e.target); }
+      });
+    }, {threshold:.1});
+    document.querySelectorAll('.stagger').forEach(el=>io.observe(el));
+  </script>
+</body>
+</html>
